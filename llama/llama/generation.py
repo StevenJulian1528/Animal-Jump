@@ -333,12 +333,15 @@ class Llama:
                         + dialog[1]["content"],
                     }
                 ] + dialog[2:]
-            assert all([msg["role"] == "user" for msg in dialog[::2]]) and all(
+            # Check for correct role structure
+            if not (all([msg["role"] == "user" for msg in dialog[::2]]) and all(
                 [msg["role"] == "assistant" for msg in dialog[1::2]]
-            ), (
-                "model only supports 'system', 'user' and 'assistant' roles, "
-                "starting with 'system', then 'user' and alternating (u/a/u/a/u...)"
-            )
+            )):
+                raise ValueError(
+                    "model only supports 'system', 'user' and 'assistant' roles, "
+                    "starting with 'system', then 'user' and alternating (u/a/u/a/u...)"
+                )
+
             dialog_tokens: List[int] = sum(
                 [
                     self.tokenizer.encode(
@@ -353,9 +356,9 @@ class Llama:
                 ],
                 [],
             )
-            assert (
-                dialog[-1]["role"] == "user"
-            ), f"Last message must be from user, got {dialog[-1]['role']}"
+            if dialog[-1]["role"] != "user":
+                 raise ValueError(f"Last message must be from user, got {dialog[-1]['role']}")
+
             dialog_tokens += self.tokenizer.encode(
                 f"{B_INST} {(dialog[-1]['content']).strip()} {E_INST}",
                 bos=True,
@@ -363,13 +366,38 @@ class Llama:
             )
             prompt_tokens.append(dialog_tokens)
 
-        generation_tokens, generation_logprobs = self.generate(
-            prompt_tokens=prompt_tokens,
-            max_gen_len=max_gen_len,
-            temperature=temperature,
-            top_p=top_p,
-            logprobs=logprobs,
-        )
+        # Optimization: Filter out unsafe requests to save compute
+        active_indices = [i for i, unsafe in enumerate(unsafe_requests) if not unsafe]
+        active_prompts = [prompt_tokens[i] for i in active_indices]
+
+        if len(active_prompts) > 0:
+            active_generation_tokens, active_generation_logprobs = self.generate(
+                prompt_tokens=active_prompts,
+                max_gen_len=max_gen_len,
+                temperature=temperature,
+                top_p=top_p,
+                logprobs=logprobs,
+            )
+        else:
+            active_generation_tokens = []
+            active_generation_logprobs = [] if logprobs else None
+
+        # Reconstruct results
+        generation_tokens = []
+        generation_logprobs = [] if logprobs else None
+
+        gen_idx = 0
+        for i, unsafe in enumerate(unsafe_requests):
+            if unsafe:
+                # Add empty result (content handled later)
+                generation_tokens.append([])
+                if logprobs:
+                    generation_logprobs.append([])
+            else:
+                generation_tokens.append(active_generation_tokens[gen_idx])
+                if logprobs:
+                    generation_logprobs.append(active_generation_logprobs[gen_idx])
+                gen_idx += 1
         if logprobs:
             return [
                 {
