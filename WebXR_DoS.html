@@ -2,16 +2,20 @@
 <html>
 <head>
     <title>Immersive SDK DoS PoC</title>
-    <!-- Import map to map bare specifiers to the correct paths -->
+    <!--
+      INSTRUCTIONS:
+      1. Build the immersive-web-sdk: `npm install && npm run build`
+      2. Serve this file from the root of the repository.
+    -->
     <script type="importmap">
     {
         "imports": {
             "three": "https://unpkg.com/three@0.181.0/build/three.module.js",
             "three/": "https://unpkg.com/three@0.181.0/",
-            "@iwsdk/core": "./temp_sdk/packages/core/dist/index.js",
-            "@iwsdk/xr-input": "./temp_sdk/packages/xr-input/dist/index.js",
-            "@iwsdk/locomotor": "./temp_sdk/packages/locomotor/dist/index.js",
-            "@iwsdk/glxf": "./temp_sdk/packages/glxf/dist/index.js",
+            "@iwsdk/core": "./packages/core/dist/index.js",
+            "@iwsdk/xr-input": "./packages/xr-input/dist/index.js",
+            "@iwsdk/locomotor": "./packages/locomotor/dist/index.js",
+            "@iwsdk/glxf": "./packages/glxf/dist/index.js",
             "@pmndrs/uikit": "https://unpkg.com/@pmndrs/uikit@1.0.60/dist/uikit.esm.js",
             "@pmndrs/uikitml": "https://unpkg.com/@pmndrs/uikitml@0.1.12/dist/uikitml.esm.js",
             "@pmndrs/pointer-events": "https://unpkg.com/@pmndrs/pointer-events@6.6.22/dist/index.js",
