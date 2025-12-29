@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+import unicodedata
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, TypedDict
 
@@ -321,7 +322,7 @@ class Llama:
         unsafe_requests = []
         for dialog in dialogs:
             unsafe_requests.append(
-                any([tag in msg["content"] for tag in SPECIAL_TAGS for msg in dialog])
+                any([tag in unicodedata.normalize("NFKC", msg["content"]) for tag in SPECIAL_TAGS for msg in dialog])
             )
             if dialog[0]["role"] == "system":
                 dialog = [
